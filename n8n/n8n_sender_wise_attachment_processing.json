@@ -1,0 +1,74 @@
+{
+]
+]
+},
+"Create Folder": {
+"main": [
+[
+{
+"node":"Split Attachments",
+"type":"main",
+"index":0
+}
+]
+]
+},
+"Split Attachments": {
+"main": [
+[
+{
+"node":"Prepare Upload",
+"type":"main",
+"index":0
+}
+]
+]
+},
+"Prepare Upload": {
+"main": [
+[
+{
+"node":"List Files In Folder",
+"type":"main",
+"index":0
+}
+]
+]
+},
+"List Files In Folder": {
+"main": [
+[
+{
+"node":"Collision Resolver",
+"type":"main",
+"index":0
+}
+]
+]
+},
+"Collision Resolver": {
+"main": [
+[
+{
+"node":"Upload File (final)",
+"type":"main",
+"index":0
+}
+]
+]
+},
+"Upload File (final)": {
+"main": [
+[
+{
+"node":"Log Success",
+"type":"main",
+"index":0
+}
+]
+]
+}
+},
+"active": false,
+"settings": {}
+}

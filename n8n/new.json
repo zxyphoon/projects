@@ -1,0 +1,411 @@
+{
+  "name": "Gmail Attachment Sender Folder Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {},
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [-96, -112],
+      "id": "b6ee9ec3-a7cb-467f-8146-1dd13ba4b45d",
+      "name": "Gmail Trigger",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PODQtmq5a8ql4z99",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a7bd38aa-9145-4bd2-82c5-d4da191d7d1d",
+              "leftValue": "={{ $('Gmail Trigger').item.binary }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [112, -112],
+      "id": "fbc77f51-1ffa-4a1b-a412-f69bcf5ee062",
+      "name": "Filter"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "messageId": "={{ $json.id }}",
+        "simple": false,
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [320, -112],
+      "id": "27f0f0b5-7b03-4fcb-936c-988b572a8e52",
+      "name": "Get a message",
+      "webhookId": "25d9e94f-f78c-4bae-9e37-874e42f0a8c8",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PODQtmq5a8ql4z99",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7cbcb123-d8ad-47bb-92b1-9fbe4fe3dc80",
+              "name": "attachments",
+              "value": "={{ Object.keys($('Get a message').item.binary) }}",
+              "type": "array"
+            },
+            {
+              "id": "b9f48902-a882-4273-afeb-c50659d5eb43",
+              "name": "message_id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [528, -272],
+      "id": "2ab0a8a2-f153-4174-96e1-d3263f42562a",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "attachments",
+        "include": "allOtherFields",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [752, -288],
+      "id": "9e8fb866-ab36-469f-8583-79083913b28a",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "msg_id_assignment",
+              "name": "message_id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "parent_folder_assignment",
+              "name": "parent_folder_id",
+              "value": "1U1V3Dp4V_d07nltPhZ9PNd_DvJ8Zuu3E",
+              "type": "string"
+            },
+            {
+              "id": "sender_raw_assignment",
+              "name": "sender_raw",
+              "value": "={{ $json.payload.headers.find(h => h.name === 'From')?.value || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "sender_email_assignment",
+              "name": "sender_email",
+              "value": "={{ $json.sender_raw.match(/<(.+?)>/)?.[1] || $json.sender_raw }}",
+              "type": "string"
+            },
+            {
+              "id": "sender_folder_assignment",
+              "name": "sender_folder",
+              "value": "={{ ($json.sender_email || 'unknown').toLowerCase().replace(/[/\\\\#%&{}<>*? $!'\":@+`|=]/g, '_') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [500, 0],
+      "id": "prepare_sender",
+      "name": "Prepare sender"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "name": "={{ $json.sender_folder }}",
+        "searchMethod": "name",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "options": {
+          "folderId": {
+            "__rl": true,
+            "value": "={{ $json.parent_folder_id }}",
+            "mode": "id"
+          },
+          "whatToSearch": "folders"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [700, 0],
+      "id": "search_sender_folder",
+      "name": "Search sender folder",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "YRwIGuUN3V7tebp7",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "folder_check_condition",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 0],
+      "id": "if_folder_exists",
+      "name": "Folder exists?"
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "operation": "create",
+        "name": "={{ $json.sender_folder }}",
+        "options": {
+          "folderId": {
+            "__rl": true,
+            "value": "={{ $json.parent_folder_id }}",
+            "mode": "id"
+          }
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1100, 100],
+      "id": "create_sender_folder",
+      "name": "Create sender folder",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "YRwIGuUN3V7tebp7",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "folder_id_found",
+              "name": "folder_id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "message_id_found",
+              "name": "message_id",
+              "value": "={{ $('Prepare sender').item.json.message_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1100, -100],
+      "id": "use_found_folder",
+      "name": "Use found folder"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "folder_id_created",
+              "name": "folder_id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "message_id_created",
+              "name": "message_id",
+              "value": "={{ $('Prepare sender').item.json.message_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1300, 100],
+      "id": "use_created_folder",
+      "name": "Use created folder"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "mergeByFields": {
+          "values": [
+            {
+              "field1": "message_id",
+              "field2": "message_id"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [1500, 0],
+      "id": "merge_folder_with_attachments",
+      "name": "Merge folder with attachments"
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $json.folder_id }}",
+          "mode": "id"
+        },
+        "name": "={{ $json.attachments }}",
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1700, 0],
+      "id": "a15ec2f7-5f11-4da6-bf8c-ab729cd90608",
+      "name": "Upload file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "YRwIGuUN3V7tebp7",
+          "name": "Google Drive account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Gmail Trigger": {
+      "main": [[{"node": "Filter", "type": "main", "index": 0}]]
+    },
+    "Filter": {
+      "main": [[{"node": "Get a message", "type": "main", "index": 0}]]
+    },
+    "Get a message": {
+      "main": [[
+        {"node": "Edit Fields", "type": "main", "index": 0},
+        {"node": "Prepare sender", "type": "main", "index": 0}
+      ]]
+    },
+    "Edit Fields": {
+      "main": [[{"node": "Split Out", "type": "main", "index": 0}]]
+    },
+    "Split Out": {
+      "main": [[{"node": "Merge folder with attachments", "type": "main", "index": 0}]]
+    },
+    "Prepare sender": {
+      "main": [[{"node": "Search sender folder", "type": "main", "index": 0}]]
+    },
+    "Search sender folder": {
+      "main": [[{"node": "Folder exists?", "type": "main", "index": 0}]]
+    },
+    "Folder exists?": {
+      "main": [
+        [{"node": "Use found folder", "type": "main", "index": 0}],
+        [{"node": "Create sender folder", "type": "main", "index": 0}]
+      ]
+    },
+    "Create sender folder": {
+      "main": [[{"node": "Use created folder", "type": "main", "index": 0}]]
+    },
+    "Use found folder": {
+      "main": [[{"node": "Merge folder with attachments", "type": "main", "index": 1}]]
+    },
+    "Use created folder": {
+      "main": [[{"node": "Merge folder with attachments", "type": "main", "index": 1}]]
+    },
+    "Merge folder with attachments": {
+      "main": [[{"node": "Upload file", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "4d4eff92-ce8b-4fed-8c00-36844be2edde",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "bc3e2b4e8e8bcbfc5b7bbc60e8671cf390ab4b823d522407416479ee0fc7faf9"
+  },
+  "id": "DIFUbxCTf4T0kflc",
+  "tags": []
+}

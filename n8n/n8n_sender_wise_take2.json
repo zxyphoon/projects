@@ -1,0 +1,266 @@
+{
+  "name": "Sender-wise Gmail Attachments to Drive",
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "interval",
+        "interval": 1,
+        "simplify": false,
+        "downloadAttachments": true,
+        "onlyUnread": true
+      },
+      "id": "Gmail Trigger",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 2,
+      "position": [-600, 200],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "__SET_ME__",
+          "name": "__SET_ME__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": [
+          {
+            "name": "sender",
+            "value": "={{$json.from?.email || $json.payload?.headers?.find(h=>h.name==='From')?.value?.match(/<(.*?)>/)?.[1] || ''}}"
+          },
+          {
+            "name": "folderName",
+            "value": "={{$json.sender}}"
+          },
+          {
+            "name": "parentRootId",
+            "value": "__PUT_GOOGLE_DRIVE_PARENT_FOLDER_ID__"
+          }
+        ]
+      },
+      "id": "Set Meta",
+      "name": "Set Meta",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [-380, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{Object.keys($binary || {}).length}}",
+              "operation": "notEqual",
+              "value2": "0"
+            }
+          ]
+        }
+      },
+      "id": "If Has Attachments",
+      "name": "If Has Attachments",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-160, 200]
+    },
+    {
+      "parameters": {
+        "operation": "list",
+        "returnAll": true,
+        "options": {
+          "query": "={{ \"mimeType='application/vnd.google-apps.folder' and name='\" + $json.folderName + \"' and '\" + $json.parentRootId + \"' in parents and trashed=false\" }}"
+        }
+      },
+      "id": "List Sender Folder",
+      "name": "List Sender Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [60, 80],
+      "credentials": {
+        "googleDriveOAuth2": {
+          "id": "__SET_ME__",
+          "name": "__SET_ME__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ Array.isArray($items()['List Sender Folder'][0]?.json) ? $items()['List Sender Folder'][0].json.length : 0 }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "If Folder Exists",
+      "name": "If Folder Exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [300, 80]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "file",
+        "name": "={{$json.folderName}}",
+        "parents": ["={{$json.parentRootId}}"],
+        "mimeType": "application/vnd.google-apps.folder"
+      },
+      "id": "Create Folder",
+      "name": "Create Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [300, 260],
+      "credentials": {
+        "googleDriveOAuth2": {
+          "id": "__SET_ME__",
+          "name": "__SET_ME__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "output": "input1"
+      },
+      "id": "Merge Folder",
+      "name": "Merge Folder",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [520, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Split Gmail attachment binaries into one item per file\\nconst out = [];\\nconst bin = $input.item.binary || {};\\nconst sender = $json.folderName;\\nfor (const [key, b] of Object.entries(bin)) {\\n  if (!b) continue;\\n  out.push({ json: { originalFileName: b.fileName, originalMimeType: b.mimeType, folderName: sender }, binary: { data: b }, pairedItem: { item: 0 } });\\n}\\nreturn out;"
+      },
+      "id": "Split Attachments",
+      "name": "Split Attachments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 380]
+    },
+    {
+      "parameters": {
+        "operation": "list",
+        "returnAll": true,
+        "options": {
+          "query": "={{ \"name='\" + $json.originalFileName + \"' and '\" + ($json.folderId || $items()['List Sender Folder'][0]?.json?.[0]?.id || $('Create Folder').item.json.id) + \"' in parents and trashed=false\" }}"
+        }
+      },
+      "id": "Collision Check",
+      "name": "Collision Check",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [760, 380],
+      "credentials": {
+        "googleDriveOAuth2": {
+          "id": "__SET_ME__",
+          "name": "__SET_ME__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ Array.isArray($items()['Collision Check'][0]?.json) ? $items()['Collision Check'][0].json.length : 0 }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "If Name Collides",
+      "name": "If Name Collides",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [980, 380]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": [
+          {
+            "name": "finalFileName",
+            "value": "={{ $json.originalFileName.replace(/\\.[^.]+$/, '') + '-' + $now.toFormat('yyyyLLdd-HHmmss') + ($json.originalFileName.match(/\\.[^.]+$/)?.[0] || '') }}"
+          }
+        ]
+      },
+      "id": "Rename For Collision",
+      "name": "Rename For Collision",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1200, 480]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": [
+          {
+            "name": "finalFileName",
+            "value": "={{ $json.originalFileName }}"
+          }
+        ]
+      },
+      "id": "Keep Original Name",
+      "name": "Keep Original Name",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "parents": ["={{ $json.folderId || $items()['List Sender Folder'][0]?.json?.[0]?.id || $('Create Folder').item.json.id }}"],
+        "fileName": "={{ $json.finalFileName }}"
+      },
+      "id": "Upload File",
+      "name": "Upload File",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1440, 380],
+      "credentials": {
+        "googleDriveOAuth2": {
+          "id": "__SET_ME__",
+          "name": "__SET_ME__"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": [
+          { "name": "sender", "value": "={{$json.folderName}}" },
+          { "name": "finalFileName", "value": "={{$json.finalFileName}}" },
+          { "name": "folderId", "value": "={{ $json.folderId || $items()['List Sender Folder'][0]?.json?.[0]?.id || $('Create Folder').item.json.id }}" }
+        ]
+      },
+      "id": "Log",
+      "name": "Log",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1660, 380]
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": { "main": [[{ "node": "Set Meta", "type": "main", "index": 0 }]] },
+    "Set Meta": { "main": [[{ "node": "If Has Attachments", "type": "main", "index": 0 }]] },
+    "If Has Attachments": { "main": [[{ "node": "List Sender Folder", "type": "main", "index": 0 }], []] },
+    "List Sender Folder": { "main": [[{ "node": "If Folder Exists", "type": "main", "index": 0 }]] },
+    "If Folder Exists": { "main": [[{ "node": "Merge Folder", "type": "main", "index": 0 }], [{ "node": "Create Folder", "type": "main", "index": 0 }]] },
+    "Create Folder": { "main": [[{ "node": "Merge Folder", "type": "main", "index": 1 }]] },
+    "Merge Folder": { "main": [[{ "node": "Split Attachments", "type": "main", "index": 0 }]] },
+    "Split Attachments": { "main": [[{ "node": "Collision Check", "type": "main", "index": 0 }]] },
+    "Collision Check": { "main": [[{ "node": "If Name Collides", "type": "main", "index": 0 }]] },
+    "If Name Collides": { "main": [[{ "node": "Keep Original Name", "type": "main", "index": 0 }], [{ "node": "Rename For Collision", "type": "main", "index": 0 }]] },
+    "Keep Original Name": { "main": [[{ "node": "Upload File", "type": "main", "index": 0 }]] },
+    "Rename For Collision": { "main": [[{ "node": "Upload File", "type": "main", "index": 0 }]] },
+    "Upload File": { "main": [[{ "node": "Log", "type": "main", "index": 0 }]] }
+  }
+}

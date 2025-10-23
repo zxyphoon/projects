@@ -1,0 +1,200 @@
+{
+  "name": "Telegram Keyword Search with Gemini (v1.115)",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "path": "telegram-gemini-search",
+        "options": {}
+      },
+      "name": "Form Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "name": "Loop Over Chats",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 2,
+      "position": [
+        640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "response": {
+          "type": "json",
+          "options": {}
+        },
+        "command": "python"
+      },
+      "name": "Search Messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        840,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "mergeByPosition",
+        "options": {}
+      },
+      "name": "Aggregate Messages",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={{$credential.googleAiApiKey}}",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"Summarize the following messages in 1-2 paragraphs, followed by bullet points with citations. Each citation should be in the format [cite:message_id].\\n\\n---\\n\\n{{JSON.stringify($items())}}\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "name": "Generate AI Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1240,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Header Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "summary",
+              "value": "={{$node[\"Generate AI Summary\"].json.candidates[0].content.parts[0].text}}"
+            },
+            {
+              "name": "messages",
+              "value": "={{$node[\"Aggregate Messages\"].json}}"
+            }
+          ],
+          "number": [
+            {
+              "name": "chats_searched",
+              "value": "={{$items.length}}"
+            },
+            {
+              "name": "matches_found",
+              "value": "={{$node[\"Aggregate Messages\"].json.length}}"
+            },
+            {
+              "name": "summarized_messages",
+              "value": "={{$node[\"Aggregate Messages\"].json.length}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Format Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Form Trigger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Form Trigger": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Chats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Chats": {
+      "main": [
+        [
+          {
+            "node": "Search Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Messages": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Messages": {
+      "main": [
+        [
+          {
+            "node": "Generate AI Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate AI Summary": {
+      "main": [
+        [
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

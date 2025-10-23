@@ -1,0 +1,202 @@
+{
+  "name": "Sender-wise Attachment Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "event": "newEmail",
+        "filters": {}
+      },
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "messageId",
+              "value": "={{$json['id']}}"
+            },
+            {
+              "name": "sender",
+              "value": "={{$json['from'] && $json['from'].match(/<(.+)>/) ? $json['from'].match(/<(.+)>/)[1] : $json['from']}}"
+            },
+            {
+              "name": "hasAttachments",
+              "value": "={{($json['attachments'] && $json['attachments'].length>0) ? 'true' : 'false'}}"
+            }
+          ]
+        }
+      },
+      "name": "Set Meta",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json['hasAttachments']}}",
+              "operation": "equal",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "name": "If Has Attachments",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const sender = items[0].json.sender || 'unknown-sender';\nconst folderName = sender.replace(/[^a-zA-Z0-9@._-]/g, '_');\nreturn [{ json: { messageId: items[0].json.messageId, sender, folderName, attachments: items[0].json.attachments || [] } }];"
+      },
+      "name": "Prepare",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "list",
+        "parentId": "={{$env.PARENT_FOLDER_ID}}",
+        "returnAll": true
+      },
+      "name": "List Parent Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const list = Object.values($input.all()).flatMap(i => i.map(x => x.json)).filter(Boolean);\nconst folderName = $json.folderName;\nconst matches = list.filter(f => f.mimeType && f.mimeType.includes('folder') && f.name === folderName);\nif (matches.length === 0) return [{ json: { found: false } }];\nmatches.sort((a,b)=> (a.createdTime || '') > (b.createdTime || '') ? 1 : -1);\nreturn [{ json: { found: true, folder: matches[0] } }];"
+      },
+      "name": "Find Sender Folder",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "name": "={{$json.folderName}}",
+        "parentId": "={{$env.PARENT_FOLDER_ID}}"
+      },
+      "name": "Create Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 1,
+      "position": [
+        1720,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const out = [];\nconst data = items[0].json;\nif (!data.attachments || data.attachments.length === 0) return [];\nfor (const a of data.attachments) {\n  out.push({ json: { messageId: data.messageId, sender: data.sender, folderName: data.folderName, attachment: a }, binary: { data: a.data } });\n}\nreturn out;"
+      },
+      "name": "Split Attachments",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1720,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const filename = $json.attachment.fileName || $json.attachment.name || ('attachment-' + Date.now());\nreturn [{ json: { ...$json, candidateFileName: filename } }];"
+      },
+      "name": "Prepare Upload",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1840,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "list",
+        "parentId": "={{$json.targetFolderId}}",
+        "returnAll": true
+      },
+      "name": "List Files In Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 1,
+      "position": [
+        2040,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const files = Object.values($input.all()).flatMap(i => i.map(x => x.json)).filter(Boolean);\nconst candidate = $json.candidateFileName;\nlet exists = files.some(f => f.name === candidate && !f.trashed);\nlet finalName = candidate;\nif (exists) {\n  const ts = new Date().toISOString().replace(/[:.]/g,'-');\n  const short = Math.random().toString(36).slice(2,8);\n  const m = candidate.match(/^(.*?)(\\.[^.]+)?$/);\n  const base = m[1];\n  const ext = m[2] || '';\n  finalName = `${base} (copy ${ts}-${short})${ext}`;\n}\nreturn [{ json: { ...$json, uploadFileName: finalName } }];"
+      },
+      "name": "Collision Resolver",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2240,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "fileName": "={{$json.uploadFileName}}",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {
+          "parents": [
+            "={{$json.targetFolderId}}"
+          ]
+        }
+      },
+      "name": "Upload File (final)",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 1,
+      "position": [
+        2480,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { timestamp: new Date().toISOString(), messageId: $json.messageId, sender: $json.sender, uploadedFile: $json.uploadFileName, targetFolderId: $json.targetFolderId, status: 'uploaded' } }];"
+      },
+      "name": "Log Success",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2720,
+        200
+      ]
+    }
+  ],
+  "connections": {},
+  "active": false,
+  "settings": {}
+}

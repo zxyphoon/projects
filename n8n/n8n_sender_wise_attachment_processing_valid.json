@@ -1,0 +1,49 @@
+{
+  "name": "Sender-wise Attachment Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "event": "newEmail",
+        "filters": {}
+      },
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "messageId",
+              "value": "={{$json[\"id\"]}}"
+            },
+            {
+              "name": "sender",
+              "value": "={{$json[\"from\"] && $json[\"from\"].match(/<(.+)>/) ? $json[\"from\"].match(/<(.+)>/)[1] : $json[\"from\"]}}"
+            },
+            {
+              "name": "hasAttachments",
+              "value": "={{($json[\"attachments\"] && $json[\"attachments\"].length>0) ? 'true' : 'false'}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set Meta",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        520,
+        300
+      ]
+    }
+  ],
+  "connections": {},
+  "active": false,
+  "settings": {}
+}

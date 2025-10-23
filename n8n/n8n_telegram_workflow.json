@@ -1,0 +1,179 @@
+{
+  "name": "Telegram Keyword Search with Gemini AI",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "telegram-search",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "b5c8d5e1-1a2b-4c3d-8e9f-0a1b2c3d4e5f",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "telegram-search-webhook"
+    },
+    {
+      "parameters": {
+        "command": "=python3 /path/to/telegram_search.py '{{ JSON.stringify($json.body.keywords) }}' '{{ JSON.stringify($json.body.groups) }}' {{ $json.body.maxResults || 200 }} {{ $json.body.dateFrom ? Math.floor(new Date($json.body.dateFrom).getTime() / 1000) : '' }} {{ $json.body.dateTo ? Math.floor(new Date($json.body.dateTo).getTime() / 1000) : '' }}"
+      },
+      "id": "execute-python-search",
+      "name": "Execute Telegram Search",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the Python script output\nconst stdout = $input.item.json.stdout;\nconst parsedOutput = JSON.parse(stdout);\n\nreturn {\n  json: parsedOutput\n};"
+      },
+      "id": "parse-search-results",
+      "name": "Parse Search Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare context for AI summarization\nconst data = $input.item.json;\nconst messages = data.messages || [];\n\n// Cap messages for token limits (100 messages for AI)\nconst maxMessagesForAI = 100;\nconst messagesToSummarize = messages.slice(0, maxMessagesForAI);\n\n// Create structured context for Gemini\nlet context = `You are analyzing ${data.totalMatches} Telegram messages matching specific keywords across ${data.chatsSearched} chats.\\n\\n`;\n\ncontext += `MESSAGES (showing ${messagesToSummarize.length} of ${data.totalMatches}):\\n\\n`;\n\nmessagesToSummarize.forEach((msg, idx) => {\n  context += `[${idx + 1}] Chat: ${msg.chat_name}\\n`;\n  context += `Author: ${msg.author} | Time: ${msg.timestamp}\\n`;\n  context += `Text: ${msg.text}\\n\\n`;\n});\n\nif (data.totalMatches > maxMessagesForAI) {\n  context += `\\⚠️ Summary truncated: Showing first ${maxMessagesForAI} of ${data.totalMatches} total matches due to token limits.\\n`;\n}\n\nreturn {\n  json: {\n    context: context,\n    messageCount: messagesToSummarize.length,\n    totalMessages: data.totalMatches,\n    isTruncated: data.totalMatches > maxMessagesForAI,\n    metadata: data\n  }\n};"
+      },
+      "id": "prepare-ai-context",
+      "name": "Prepare AI Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "You are an expert at analyzing and summarizing Telegram conversation threads. Provide clear, factual summaries with proper citations to message numbers in the format [1], [2], etc."
+        }
+      },
+      "id": "ai-summary-agent",
+      "name": "AI Summary Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [1040, 300]
+    },
+    {
+      "parameters": {
+        "model": "gemini-1.5-pro",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 2048
+        }
+      },
+      "id": "gemini-chat-model",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [1040, 480],
+      "credentials": {
+        "googleGeminiOAuth2Api": {
+          "id": "YOUR_GEMINI_CREDENTIAL_ID",
+          "name": "Google Gemini Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format final output with summary, messages table, and counters\nconst aiOutput = $('AI Summary Agent').item.json.output;\nconst contextData = $('Prepare AI Context').item.json;\nconst metadata = contextData.metadata;\nconst messages = metadata.messages || [];\nconst isTruncated = contextData.isTruncated;\n\n// Build AI-generated summary section\nlet summary = '## AI-Generated Summary\\n\\n';\nsummary += aiOutput + '\\n\\n';\n\nif (isTruncated) {\n  summary += '⚠️ **Note:** Summary based on first 100 messages due to token limits.\\n\\n';\n}\n\n// Build statistics counters\nlet counters = '### Search Statistics\\n\\n';\ncounters += `- **Chats Searched:** ${metadata.chatsSearched}\\n`;\ncounters += `- **Total Matches Found:** ${metadata.totalMatches}\\n`;\ncounters += `- **Messages Summarized:** ${Math.min(metadata.totalMatches, 100)}\\n\\n`;\n\n// Build chat breakdown\nif (metadata.chatCounts && Object.keys(metadata.chatCounts).length > 0) {\n  counters += '### Matches per Chat\\n\\n';\n  for (const [chatName, count] of Object.entries(metadata.chatCounts)) {\n    counters += `- **${chatName}:** ${count} messages\\n`;\n  }\n  counters += '\\n';\n}\n\n// Build error notices (if any)\nlet errors = '';\nif (metadata.errors && metadata.errors.length > 0) {\n  errors = '### ⚠️ Errors\\n\\n';\n  metadata.errors.forEach(err => {\n    errors += `- **${err.chat}:** ${err.error}\\n`;\n  });\n  errors += '\\n';\n}\n\n// Build messages table\nlet messagesTable = '## Matched Messages\\n\\n';\nmessagesTable += '| Chat | Author | Timestamp | Snippet | Link |\\n';\nmessagesTable += '|------|--------|-----------|---------|------|\\n';\n\nmessages.forEach(msg => {\n  const snippet = msg.snippet.replace(/\\|/g, '\\\\|').replace(/\\n/g, ' ');\n  messagesTable += `| ${msg.chat_name} | ${msg.author} | ${msg.timestamp} | ${snippet} | [View](${msg.telegram_link}) |\\n`;\n});\n\nreturn {\n  json: {\n    summary: summary,\n    counters: counters,\n    errors: errors,\n    messagesTable: messagesTable,\n    fullOutput: summary + counters + errors + messagesTable,\n    rawData: {\n      messages: messages,\n      totalMatches: metadata.totalMatches,\n      chatsSearched: metadata.chatsSearched,\n      chatCounts: metadata.chatCounts\n    }\n  }\n};"
+      },
+      "id": "format-final-output",
+      "name": "Format Final Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1240, 300]
+    },
+    {
+      "parameters": {
+        "content": "## 📋 Telegram Keyword Search Workflow\n\n### How to Use:\n\n**1. Setup Python Script:**\n- Update `telegram_search.py` with your API credentials\n- Install: `pip install telethon`\n- Run once to authenticate: `python3 telegram_search.py`\n\n**2. Configure Execute Node:**\n- Change `/path/to/telegram_search.py` to actual path\n- Ensure Python 3.7+ is installed\n\n**3. Add Gemini Credentials:**\n- Go to n8n Credentials\n- Add Google Gemini OAuth2 API\n- Update credential ID in Gemini node\n\n**4. Test Webhook:**\nSend POST request to webhook URL:\n``````\n\n### Rate Limiting:\n- ✓ 100 messages per request\n- ✓ 10 requests per 30 seconds\n- ✓ 1.5s delay between batches\n- ✓ Auto FloodWait handling\n\n### Output:\n- AI-generated summary (1-2 paragraphs + bullets)\n- Messages table (chat, author, timestamp, snippet, link)\n- Search statistics counters\n- Error notices (if any)",
+        "height": 680,
+        "width": 420
+      },
+      "id": "sticky-note-instructions",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, 540]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Execute Telegram Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Telegram Search": {
+      "main": [
+        [
+          {
+            "node": "Parse Search Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Search Results": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Context": {
+      "main": [
+        [
+          {
+            "node": "AI Summary Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Summary Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Summary Agent": {
+      "main": [
+        [
+          {
+            "node": "Format Final Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-17T11:24:00.000Z",
+  "versionId": "1"
+}
