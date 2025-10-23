@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Telegram Search</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 20px; }
+        form div { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; }
+        input, select { width: 100%; padding: 8px; box-sizing: border-box; }
+        select[multiple] { height: 200px; }
+        button { padding: 10px 15px; cursor: pointer; }
+        .error { color: red; border: 1px solid red; padding: 10px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Telegram Keyword Search</h1>
+
+    {% if error %}
+        <div class="error">
+            <strong>Error:</strong> {{ error }}
+        </div>
+    {% endif %}
+
+    <form action="/search" method="post">
+        <div>
+            <label for="keywords">Keywords (comma-separated):</label>
+            <input type="text" id="keywords" name="keywords" required>
+        </div>
+        <div>
+            <label for="chats">Groups/Channels (Ctrl+Click or Cmd+Click for multiple):</label>
+            <select name="chats" id="chats" multiple required>
+                {% for chat in chats %}
+                    <option value="{{ chat.id }}">{{ chat.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="start_date">Start Date:</label>
+            <input type="date" id="start_date" name="start_date" required>
+        </div>
+        <div>
+            <label for="end_date">End Date:</label>
+            <input type="date" id="end_date" name="end_date" required>
+        </div>
+        <div>
+            <label for="max_results">Max results per chat:</label>
+            <input type="number" id="max_results" name="max_results" value="200" required>
+        </div>
+        <div>
+            <button type="submit">Search</button>
+        </div>
+    </form>
+</body>
+</html>

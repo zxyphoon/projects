@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Search Results</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            max-width: 900px; 
+            margin: auto; 
+            padding: 20px; 
+            line-height: 1.6; 
+            color: #333;
+        }
+        
+        /* --- STYLES FOR THE AI SUMMARY --- */
+        .summary { 
+            border: 1px solid #e0e0e0; 
+            padding: 10px 25px; 
+            margin-bottom: 30px; 
+            background-color: #fdfdfd;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .summary h1, .summary h2, .summary h3 {
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+            margin-top: 20px;
+        }
+        .summary strong {
+            color: #111;
+        }
+        .summary ul, .summary ol {
+            padding-left: 20px;
+        }
+        .summary li {
+            margin-bottom: 8px;
+        }
+        .summary p {
+            margin: 1em 0;
+        }
+        /* --- END OF SUMMARY STYLES --- */
+
+        .message { 
+            border-bottom: 1px solid #eee; 
+            padding: 10px 0; 
+        }
+        .message-meta { 
+            font-size: 0.9em; 
+            color: #555; 
+        }
+
+        a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <a href="/">&larr; Back to New Search</a>
+    
+    <h1>Search Results</h1>
+
+    <h2>AI Summary from n8n</h2>
+    
+    <!-- 
+      KEY CHANGE: This div now uses the `summary_html` variable.
+      The `| safe` filter tells the browser to render the HTML tags
+      (like <strong>, <ul>, etc.) instead of just displaying them as text.
+    -->
+    <div class="summary">
+        {{ summary_html | safe }}
+    </div>
+
+    <h2>Matched Messages ({{ messages|length }})</h2>
+    <div>
+        {% for message in messages %}
+            <div class="message">
+                <div class="message-meta">
+                    <strong>Chat:</strong> {{ message.chat_name }} | 
+                    <strong>Author:</strong> {{ message.author }} | 
+                    <strong>Timestamp:</strong> {{ message.timestamp }}
+                </div>
+                <p>{{ message.text }}</p>
+            </div>
+        {% else %}
+            <p>No messages found matching your criteria.</p>
+        {% endfor %}
+    </div>
+</body>
+</html>
