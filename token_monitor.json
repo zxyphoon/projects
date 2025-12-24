@@ -1,0 +1,455 @@
+{
+  "name": "token_monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "0c5e4677-6c34-47c8-b81c-2471d03643ec",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "resource": "execution",
+        "filters": {},
+        "options": {},
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "c68c43fb-9022-4207-beb8-bd77ad2709b1",
+      "name": "Get many executions",
+      "credentials": {
+        "n8nApi": {
+          "id": "j3t9OR3O45U8blEd",
+          "name": "n8n account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "let totalTokens = 0;\nconst execution = $(\"Get an execution\").item.json;\nconst runData = execution.data?.resultData?.runData;\n\n// If there is no run data (execution failed instantly), we just return 0\nif (runData) {\n    for (const nodeName in runData) {\n        const nodeRuns = runData[nodeName];\n        nodeRuns.forEach(run => {\n            if (run.data?.usage?.totalTokens) totalTokens += run.data.usage.totalTokens;\n            if (run.data?.intermediateSteps) {\n                run.data.intermediateSteps.forEach(step => {\n                    if (step.response?.usage?.total_tokens) totalTokens += step.response.usage.total_tokens;\n                });\n            }\n        });\n    }\n}\n\nreturn {\n    workflowName: $json.name || \"Unknown Workflow\",\n    executionId: execution.id,\n    status: execution.status, // Added this line to track success vs failure\n    tokensUsed: totalTokens,\n    timestamp: execution.stoppedAt\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        16
+      ],
+      "id": "ea29fc7e-061e-4b13-8065-69fa40161a1c",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "QjlTf3mKs9JBbkyz",
+          "mode": "list",
+          "cachedResultName": "UsageBaseline",
+          "cachedResultUrl": "/projects/mv5CXo9QViueBIEh/datatables/QjlTf3mKs9JBbkyz"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "workflow_name",
+              "keyValue": "={{ $json.workflowName }}"
+            }
+          ]
+        },
+        "limit": 100
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        -96
+      ],
+      "id": "76951347-d0ac-4908-bc64-9107255d23ea",
+      "name": "Get row(s)",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// 1. All these values are now inside $json because of the Merge node\nconst tokens = $json.tokensUsed || 0;\nconst wfName = $json.workflowName || \"Unknown Workflow\";\nconst currentStatus = $json.status || \"success\"; // Grab status from Merge output\n\n// 2. Database values (also from Merge output)\nconst avg = $json.avg_token || 0;\nconst count = $json.execution_count || 0;\n\n// 3. Anomaly Logic\nconst isAnomaly = tokens > (avg * 3) && tokens > 1000;\n\n// 4. Calculate new values\nconst nextCount = count + 1;\nconst nextAvg = Math.round(((avg * count) + tokens) / nextCount);\n\nreturn {\n  workflowName: wfName,\n  tokensUsed: tokens,\n  isAnomaly: isAnomaly,\n  status: currentStatus, // Pass the status through correctly\n  oldAvg: avg,\n  newAvg: nextAvg,\n  newCount: nextCount\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1536,
+        64
+      ],
+      "id": "d667436a-7258-48e8-9881-16591c548e72",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "4893638a-e366-4aa0-859c-f0b6cd1ed836",
+              "leftValue": "={{ $json.isAnomaly }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "9806bb20-e75d-4926-a05a-83268c1e3539",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "=error",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1744,
+        64
+      ],
+      "id": "864cb301-41d2-4440-9cc8-696ad456e1a2",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "sendTo": "priyojitsarkar21@gmail.com",
+        "subject": "={{ $json.status === 'error' ? '❌ Failure' : '⚠️ Token Spike' }}: {{ $json.workflowName }}",
+        "message": "=<h3>Anomaly Detected in n8n</h3> <p>The workflow <b>{{ $node[\"Code in JavaScript1\"].json.workflowName }}</b> just finished with unusually high token usage.</p>  <ul>   <li><b>Current Usage:</b> {{ $node[\"Code in JavaScript1\"].json.tokensUsed }} tokens</li>   <li><b>Typical Average:</b> {{ $node[\"Code in JavaScript1\"].json.oldAvg }} tokens</li>   <li><b>Execution ID:</b> {{ $node[\"Code in JavaScript1\"].json.executionId }}</li> </ul>  <p><i>Check your local n8n instance to ensure the AI isn't stuck in a loop.</i></p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1952,
+        -32
+      ],
+      "id": "4f3b5b66-5ebb-4bd4-9d84-d2aad832a20e",
+      "name": "Send a message",
+      "webhookId": "19aa6aff-d410-4f85-a9c6-b17e7f2c2491",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "yM5cPa1igEByyouo",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "QjlTf3mKs9JBbkyz",
+          "mode": "list",
+          "cachedResultName": "UsageBaseline",
+          "cachedResultUrl": "/projects/mv5CXo9QViueBIEh/datatables/QjlTf3mKs9JBbkyz"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "workflow_name",
+              "keyValue": "={{ $(\"Code in JavaScript1\").item.json.workflowName }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "workflow_name": "={{ $(\"Code in JavaScript1\").item.json.workflowName }}",
+            "avg_token": "={{ $(\"Code in JavaScript1\").item.json.newAvg }}",
+            "execution_count": "={{ $(\"Code in JavaScript1\").item.json.newCount }}",
+            "last_status": "={{ $json.status }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "workflow_name",
+              "displayName": "workflow_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "avg_token",
+              "displayName": "avg_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "execution_count",
+              "displayName": "execution_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_status",
+              "displayName": "last_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        2016,
+        176
+      ],
+      "id": "b5eef16c-bf4f-476d-949b-d54a90dfdcff",
+      "name": "Upsert row(s)"
+    },
+    {
+      "parameters": {
+        "resource": "execution",
+        "operation": "get",
+        "executionId": "={{  $json.id }}",
+        "options": {},
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [
+        416,
+        0
+      ],
+      "id": "6fcd5062-4621-4ea2-9bbe-50a742cb4ccd",
+      "name": "Get an execution",
+      "credentials": {
+        "n8nApi": {
+          "id": "j3t9OR3O45U8blEd",
+          "name": "n8n account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "workflowId": {
+          "__rl": true,
+          "value": "={{ $json.workflowId }}",
+          "mode": "id"
+        },
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [
+        640,
+        16
+      ],
+      "id": "9fad2269-2b80-4ba4-be49-4072d91cae0e",
+      "name": "Get a workflow",
+      "credentials": {
+        "n8nApi": {
+          "id": "j3t9OR3O45U8blEd",
+          "name": "n8n account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1312,
+        16
+      ],
+      "id": "a334f346-6436-416f-a6b0-2a945c306e9e",
+      "name": "Merge"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get many executions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many executions": {
+      "main": [
+        [
+          {
+            "node": "Get an execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Get row(s)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get row(s)": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Upsert row(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get an execution": {
+      "main": [
+        [
+          {
+            "node": "Get a workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a workflow": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Upsert row(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "00e59f92-cc65-41a2-8ae2-1c07829c2760",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8f18bb9b22108611dc7042cc9190682534ac60c4af6e320856eb4efd7d3b97fa"
+  },
+  "id": "k5yLopQQMTGBvryk",
+  "tags": []
+}
