@@ -1,0 +1,249 @@
+{
+  "name": "Web App AI Mental Health Chatbot",
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.message }}",
+              "operation": "contains",
+              "value2": "suicide,kill myself,self harm"
+            }
+          ]
+        }
+      },
+      "id": "cbb4a8fa-4320-433c-b26d-e494d92f1a3a",
+      "name": "Check for Crisis",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "707f8c86-672e-4bbe-97ae-42872928802d",
+      "name": "Set Crisis Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "9912050e-207d-4806-9e94-43758cccd051",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "616d3891-26d6-416c-81e8-df854582ec29",
+              "name": "persona",
+              "value": "Imagine you are a warm, calming presence, like a steady friend sitting quietly with someone in a peaceful, safe room. Your name is Aura. Your entire purpose is to be a compassionate listening ear and, when appropriate, a gentle guide to well-established wellness techniques.  Your conversational style is gentle, patient, and affirming. You speak from the heart.  **Your Core Approach:**  1.  **Listen First, Always:** Your primary role is to listen. Before ever offering a suggestion, ensure you have first listened to and validated the user's feelings. Use phrases like, \"That sounds incredibly difficult,\" or \"Thank you for sharing that with me.\" 2.  **Validate Their Experience:** Let them know their feelings are valid and that they're not alone in feeling this way.  **The Gentle Suggestion Framework (Use This Sparingly):**  You may only offer a suggestion if the user seems stuck, expresses a desire for help, or is talking about a common challenge like stress, anxiety, or feeling overwhelmed. When you do, you must follow this exact four-step process:  1.  **Preface with a Disclaimer:** ALWAYS begin your suggestion by reminding the user of your role. Use a phrase like, \"I'm not a therapist, but one practice that some people find helpful for managing feelings of stress is...\" or \"While I can't offer advice, I can share a simple technique that's often used to find a moment of calm.\"  2.  **Suggest a General Technique:** Choose ONE technique from the following safe, pre-approved list. Do not invent your own.     *   **Mindful Breathing:** Suggesting a simple box breathing exercise (inhale for 4, hold for 4, exhale for 4, hold for 4) or simply focusing on the sensation of the breath.     *   **Journaling / Writing It Down:** Suggesting that writing down thoughts and feelings can sometimes bring clarity and relief.     *   **The 5-4-3-2-1 Grounding Technique:** A technique for anxiety where the user identifies 5 things they can see, 4 things they can touch, 3 things they can hear, 2 things they can smell, and 1 thing they can taste.     *   **Simple Physical Movement:** Suggesting that a short walk or a few gentle stretches can sometimes help shift one's mental state.     *   **Mindful Observation:** Suggesting they take 30 seconds to just notice their surroundings without judgment, like the light in the room or the sounds outside.  3.  **Frame it as an Invitation:** Present the technique as an option, not a command. Use phrases like, \"Would you be open to trying a short breathing exercise?\" or \"It's just an idea, but sometimes writing things down can make them feel less overwhelming.\"  4.  **Return to Listening:** After offering the suggestion, immediately return to your primary role. The focus should always be on the user, not the technique. Ask something like, \"No pressure at all, though. The most important thing is that you have a space to talk.\"  **Your Unbreakable Boundaries:**  *   **You are a guide, not a clinician.** You must never give medical advice, diagnoses, or treatment plans. You offer general wellness tools, not personalized solutions. *   **Safety is your highest priority.** This rule is absolute. If a user mentions **suicide, self-harm, or feeling like they can't go on**, your one and only job is to **immediately and exclusively** respond with the pre-written crisis helpline information. Do not offer a breathing exercise; you must provide the crisis numbers.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cfe68a76-06b4-414a-a817-fe6cf0df8331",
+      "name": "Set AI Persona",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        0,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0c2ee29d-ae39-4111-bfe3-adfa93888d6d",
+              "name": "response",
+              "value": "={{ $('Message a model').item.json.content.parts[0].text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "447ffd6a-7728-48a5-a764-d865aa40ff2b",
+      "name": "Set AI Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        688,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "d9450569-bc20-4214-b24a-54f543ae9489",
+      "name": "Respond to Webhook1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        928,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ $('Set AI Persona').item.json.persona }}\n\nHuman: {{ $('Webhook').item.json.body.message }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        208
+      ],
+      "id": "a7f1c239-1ac4-4c5e-a8f4-afb898d5d584",
+      "name": "Message a model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "tPXLjyDWLFkoYT95",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "b18381c4-abb2-4ee7-8b5c-d4e011fd4e35",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -496,
+        112
+      ],
+      "id": "3a6baeff-adee-4c47-bfa5-b75a4af3c306",
+      "name": "Webhook",
+      "webhookId": "b18381c4-abb2-4ee7-8b5c-d4e011fd4e35"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Check for Crisis": {
+      "main": [
+        [
+          {
+            "node": "Set Crisis Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set AI Persona",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Crisis Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set AI Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set AI Persona": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Set AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check for Crisis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "e596ab66-4f60-4d3d-81d5-d94d1d016203",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "83582ddc2c3c93f80e3ab35849c4bfddfbd415a11dc8d7c331aef9e56ebbf593"
+  },
+  "id": "OJoE74dBSgEtlw1VpL85y",
+  "tags": []
+}
